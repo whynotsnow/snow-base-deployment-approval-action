@@ -1,0 +1,161 @@
+name: Deployment approval client
+description: Versioned client for the snow-base deployment approval contract.
+inputs:
+  operation:
+    description: contract, register-artifact, request-approval, wait-approval, get-approval, consume-approval, candidate-callback, or deployment-callback
+    required: true
+  api-base-url:
+    description: snow-base API base URL
+    required: false
+    default: https://api.whynotsnow.com
+  token:
+    description: Deployment service token
+    required: true
+  project-slug:
+    description: Deployment project slug
+    required: false
+  target:
+    description: Independent deployment target
+    required: false
+  commit-sha:
+    description: Full lowercase commit SHA
+    required: false
+  request-id:
+    description: Approval or deployment request id
+    required: false
+  approval-id:
+    description: Approval id to consume
+    required: false
+  artifact-id:
+    description: Immutable artifact id
+    required: false
+  artifact-digest:
+    description: Immutable sha256 artifact digest
+    required: false
+  artifact-type:
+    description: Artifact type when registering an artifact
+    required: false
+  storage-provider:
+    description: Artifact storage provider when registering an artifact
+    required: false
+  storage-key:
+    description: Artifact logical storage key
+    required: false
+  artifact-role:
+    description: candidate or deployment
+    required: false
+    default: candidate
+  metadata-json:
+    description: JSON object with non-secret artifact metadata
+    required: false
+  expires-at:
+    description: Candidate artifact expiry timestamp
+    required: false
+  build-status:
+    description: Artifact build status
+    required: false
+    default: succeeded
+  validation-status:
+    description: Artifact validation status
+    required: false
+    default: succeeded
+  change-summary:
+    description: Human-readable change summary
+    required: false
+  validation-summary:
+    description: Human-readable validation summary
+    required: false
+  request-source:
+    description: Source identifier for the request
+    required: false
+    default: github-actions
+  request-url:
+    description: URL for the originating workflow
+    required: false
+  idempotency-key:
+    description: Stable retry key for approval creation
+    required: false
+  github-run-id:
+    description: Numeric GitHub workflow run id for callbacks
+    required: false
+  github-run-url:
+    description: GitHub workflow run URL for callbacks
+    required: false
+  callback-status:
+    description: queued, in_progress, or completed
+    required: false
+  conclusion:
+    description: Workflow conclusion when callback-status is completed
+    required: false
+  phase:
+    description: Workflow phase for callback telemetry
+    required: false
+  error-code:
+    description: Sanitized workflow error code
+    required: false
+  create-if-missing:
+    description: Allow deployment callback to create its run record
+    required: false
+    default: "false"
+  wait-seconds:
+    description: Maximum approval wait time for wait-approval
+    required: false
+    default: "900"
+  poll-seconds:
+    description: Approval polling interval for wait-approval
+    required: false
+    default: "15"
+outputs:
+  approval-id:
+    description: Approval id returned by the API
+  artifact-id:
+    description: Artifact id returned by the API
+  artifact-digest:
+    description: Artifact digest returned by the API
+  request-id:
+    description: Request or candidate id returned by the API
+  status:
+    description: Result status returned by the API
+  reused:
+    description: Whether the API reused an existing record
+  protocol-version:
+    description: Recommended protocol version returned by contract
+runs:
+  using: composite
+  steps:
+    - name: Call deployment approval API
+      shell: bash
+      env:
+        DEPLOYMENT_CLIENT_OPERATION: ${{ inputs.operation }}
+        DEPLOYMENT_CLIENT_API_BASE_URL: ${{ inputs.api-base-url }}
+        DEPLOYMENT_CLIENT_TOKEN: ${{ inputs.token }}
+        DEPLOYMENT_CLIENT_PROJECT_SLUG: ${{ inputs.project-slug }}
+        DEPLOYMENT_CLIENT_TARGET: ${{ inputs.target }}
+        DEPLOYMENT_CLIENT_COMMIT_SHA: ${{ inputs.commit-sha }}
+        DEPLOYMENT_CLIENT_REQUEST_ID: ${{ inputs.request-id }}
+        DEPLOYMENT_CLIENT_APPROVAL_ID: ${{ inputs.approval-id }}
+        DEPLOYMENT_CLIENT_ARTIFACT_ID: ${{ inputs.artifact-id }}
+        DEPLOYMENT_CLIENT_ARTIFACT_DIGEST: ${{ inputs.artifact-digest }}
+        DEPLOYMENT_CLIENT_ARTIFACT_TYPE: ${{ inputs.artifact-type }}
+        DEPLOYMENT_CLIENT_STORAGE_PROVIDER: ${{ inputs.storage-provider }}
+        DEPLOYMENT_CLIENT_STORAGE_KEY: ${{ inputs.storage-key }}
+        DEPLOYMENT_CLIENT_ARTIFACT_ROLE: ${{ inputs.artifact-role }}
+        DEPLOYMENT_CLIENT_METADATA_JSON: ${{ inputs.metadata-json }}
+        DEPLOYMENT_CLIENT_EXPIRES_AT: ${{ inputs.expires-at }}
+        DEPLOYMENT_CLIENT_BUILD_STATUS: ${{ inputs.build-status }}
+        DEPLOYMENT_CLIENT_VALIDATION_STATUS: ${{ inputs.validation-status }}
+        DEPLOYMENT_CLIENT_CHANGE_SUMMARY: ${{ inputs.change-summary }}
+        DEPLOYMENT_CLIENT_VALIDATION_SUMMARY: ${{ inputs.validation-summary }}
+        DEPLOYMENT_CLIENT_REQUEST_SOURCE: ${{ inputs.request-source }}
+        DEPLOYMENT_CLIENT_REQUEST_URL: ${{ inputs.request-url }}
+        DEPLOYMENT_CLIENT_IDEMPOTENCY_KEY: ${{ inputs.idempotency-key }}
+        DEPLOYMENT_CLIENT_GITHUB_RUN_ID: ${{ inputs.github-run-id }}
+        DEPLOYMENT_CLIENT_GITHUB_RUN_URL: ${{ inputs.github-run-url }}
+        DEPLOYMENT_CLIENT_CALLBACK_STATUS: ${{ inputs.callback-status }}
+        DEPLOYMENT_CLIENT_CONCLUSION: ${{ inputs.conclusion }}
+        DEPLOYMENT_CLIENT_PHASE: ${{ inputs.phase }}
+        DEPLOYMENT_CLIENT_ERROR_CODE: ${{ inputs.error-code }}
+        DEPLOYMENT_CLIENT_CREATE_IF_MISSING: ${{ inputs.create-if-missing }}
+        DEPLOYMENT_CLIENT_WAIT_SECONDS: ${{ inputs.wait-seconds }}
+        DEPLOYMENT_CLIENT_POLL_SECONDS: ${{ inputs.poll-seconds }}
+      run: node "$GITHUB_ACTION_PATH/client.mjs"
