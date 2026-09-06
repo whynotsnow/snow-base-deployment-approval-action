@@ -13,6 +13,9 @@ contract source remains the `packages/shared` contract and the live
 This initial public distribution is tracked by `SB-RM-084` in the snow-base
 planning sidecar. The repository keeps its own independent release history.
 
+Release `v1.0.1` fixes the composite metadata output mapping so callers receive
+the values written by the client step, including `artifact-id`.
+
 ## Pinned usage
 
 Pin production workflows to the complete commit SHA. The tag is a readable release

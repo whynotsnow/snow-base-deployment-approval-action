@@ -159,3 +159,22 @@ test("invalid combined target fails closed before a request", async () => {
   assert.notEqual(result.code, 0);
   assert.match(result.stderr, /split_deployment_required/u);
 });
+
+test("composite metadata maps every client output", async () => {
+  const action = await readFile(new URL("../action.yml", import.meta.url), "utf8");
+  assert.match(action, /id: client\n/u);
+  for (const name of [
+    "approval-id",
+    "artifact-id",
+    "artifact-digest",
+    "request-id",
+    "status",
+    "reused",
+    "protocol-version",
+  ]) {
+    assert.ok(
+      action.includes(`value: \${{ steps.client.outputs.${name} }}`),
+      `missing composite output mapping for ${name}`,
+    );
+  }
+});

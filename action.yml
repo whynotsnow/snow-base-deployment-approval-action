@@ -108,22 +108,30 @@ inputs:
 outputs:
   approval-id:
     description: Approval id returned by the API
+    value: ${{ steps.client.outputs.approval-id }}
   artifact-id:
     description: Artifact id returned by the API
+    value: ${{ steps.client.outputs.artifact-id }}
   artifact-digest:
     description: Artifact digest returned by the API
+    value: ${{ steps.client.outputs.artifact-digest }}
   request-id:
     description: Request or candidate id returned by the API
+    value: ${{ steps.client.outputs.request-id }}
   status:
     description: Result status returned by the API
+    value: ${{ steps.client.outputs.status }}
   reused:
     description: Whether the API reused an existing record
+    value: ${{ steps.client.outputs.reused }}
   protocol-version:
     description: Recommended protocol version returned by contract
+    value: ${{ steps.client.outputs.protocol-version }}
 runs:
   using: composite
   steps:
     - name: Call deployment approval API
+      id: client
       shell: bash
       env:
         DEPLOYMENT_CLIENT_OPERATION: ${{ inputs.operation }}

@@ -15,3 +15,43 @@ jobs:
         uses: actions/checkout@v4
       - name: Run client checks
         run: npm test
+      - name: Start mock deployment API
+        run: |
+          node scripts/composite-output-server.mjs > "$RUNNER_TEMP/deployment-api.log" 2>&1 &
+          echo $! > "$RUNNER_TEMP/deployment-api.pid"
+          attempts=0
+          until curl --fail --silent http://127.0.0.1:4123/health >/dev/null 2>&1 || [ "$attempts" -ge 20 ]; do
+            attempts=$((attempts + 1))
+            sleep 1
+          done
+          curl --fail --silent http://127.0.0.1:4123/health >/dev/null
+      - name: Exercise composite output mapping
+        id: register
+        uses: ./
+        with:
+          operation: register-artifact
+          api-base-url: http://127.0.0.1:4123
+          token: fixture-token
+          project-slug: blog
+          target: site
+          commit-sha: 0123456789abcdef0123456789abcdef01234567
+          artifact-type: vercel-prebuilt
+          artifact-digest: sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+          storage-provider: github-actions
+          storage-key: fixture
+      - name: Assert composite outputs
+        env:
+          ARTIFACT_ID: ${{ steps.register.outputs.artifact-id }}
+          ARTIFACT_DIGEST: ${{ steps.register.outputs.artifact-digest }}
+          REQUEST_ID: ${{ steps.register.outputs.request-id }}
+          STATUS: ${{ steps.register.outputs.status }}
+          REUSED: ${{ steps.register.outputs.reused }}
+        run: |
+          test "$ARTIFACT_ID" = artifact_fixture
+          test "$ARTIFACT_DIGEST" = sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+          test "$REQUEST_ID" = request_fixture
+          test "$STATUS" = registered
+          test "$REUSED" = false
+      - name: Stop mock deployment API
+        if: always()
+        run: kill "$(cat "$RUNNER_TEMP/deployment-api.pid")"
