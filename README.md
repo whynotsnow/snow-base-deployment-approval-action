@@ -13,8 +13,8 @@ contract source remains the `packages/shared` contract and the live
 This initial public distribution is tracked by `SB-RM-084` in the snow-base
 planning sidecar. The repository keeps its own independent release history.
 
-Release `v1.0.1` fixes the composite metadata output mapping so callers receive
-the values written by the client step, including `artifact-id`.
+Release `v1.0.2` validates the API origin before sending a token, expands protocol
+mock coverage, and retries only reads and stable-identity callbacks.
 
 ## Pinned usage
 
@@ -54,10 +54,15 @@ the platform deploy step. Do not use `target: both` for independent deployments.
 ## Contract
 
 The action reads `https://api.whynotsnow.com` by default. Override `api-base-url`
-only for an explicitly configured compatible contract endpoint. Every request uses
+only for an explicitly configured compatible HTTPS origin. URL credentials, paths,
+queries, fragments, and public HTTP endpoints are rejected before a request. HTTP is
+allowed only for `localhost`, `127.0.0.1`, and `[::1]` mock servers. Every request uses
 `Authorization: Bearer <token>` and accepts the standard `{ ok, data, error }`
-response envelope. Network failures and HTTP 5xx responses receive up to two
-bounded retries; identity mismatches and API errors fail closed.
+response envelope. Read-only requests and candidate/deployment callbacks with stable
+request identities retry at most twice after selected transient network errors and
+HTTP 408, 425, 429, 500, 502, 503, or 504 responses. Artifact registration, approval
+creation, and single-use approval consumption are stateful requests and are never
+automatically retried. Identity mismatches and API errors fail closed.
 
 Supported operations are:
 

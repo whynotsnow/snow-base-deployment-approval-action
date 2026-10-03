@@ -5,7 +5,7 @@ inputs:
     description: contract, register-artifact, request-approval, wait-approval, get-approval, consume-approval, candidate-callback, or deployment-callback
     required: true
   api-base-url:
-    description: snow-base API base URL
+    description: HTTPS API origin; HTTP is allowed only for localhost mock tests
     required: false
     default: https://api.whynotsnow.com
   token:

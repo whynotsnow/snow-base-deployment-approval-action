@@ -2,16 +2,67 @@ import { appendFileSync } from "node:fs";
 
 const env = process.env;
 const operation = env.DEPLOYMENT_CLIENT_OPERATION;
-const apiBaseUrl = (env.DEPLOYMENT_CLIENT_API_BASE_URL || "https://api.whynotsnow.com").replace(
-  /\/+$/u,
-  "",
-);
 const token = env.DEPLOYMENT_CLIENT_TOKEN;
+const retryableStatuses = new Set([408, 425, 429, 500, 502, 503, 504]);
+const retryableNetworkCodes = new Set([
+  "ECONNRESET",
+  "ECONNREFUSED",
+  "EAI_AGAIN",
+  "ENETDOWN",
+  "ENETUNREACH",
+  "ENOTFOUND",
+  "ETIMEDOUT",
+  "UND_ERR_BODY_TIMEOUT",
+  "UND_ERR_CONNECT_TIMEOUT",
+  "UND_ERR_HEADERS_TIMEOUT",
+  "UND_ERR_SOCKET",
+]);
 
 function fail(code, message) {
-  console.error(`[deployment-approval-client] ${code}: ${message}`);
+  console.error(`[deployment-approval-client] ${redact(code)}: ${redact(message)}`);
   process.exit(1);
 }
+
+function redact(value) {
+  const text = String(value);
+  return token ? text.split(token).join("[redacted]") : text;
+}
+
+function isRetryableNetworkError(error) {
+  return (
+    error?.name === "TimeoutError" ||
+    error?.name === "AbortError" ||
+    retryableNetworkCodes.has(error?.cause?.code) ||
+    error instanceof TypeError
+  );
+}
+
+function resolveApiBaseUrl(value) {
+  const input = value?.trim() || "https://api.whynotsnow.com";
+  let url;
+  try {
+    url = new URL(input);
+  } catch {
+    fail("invalid_api_base_url", "api-base-url must be a valid HTTPS URL.");
+  }
+
+  const authority = input.match(/^[a-z][a-z\d+.-]*:\/\/([^/?#]*)/iu)?.[1] || "";
+  const localhost = ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname);
+  const isLocalMock = url.protocol === "http:" && localhost;
+  if (url.protocol !== "https:" && !isLocalMock) {
+    fail("invalid_api_base_url", "api-base-url must use HTTPS; HTTP is limited to localhost.");
+  }
+  if (authority.includes("@") || url.username || url.password) {
+    fail("invalid_api_base_url", "api-base-url must not contain URL credentials.");
+  }
+  if (url.pathname !== "/" || url.search || url.hash) {
+    fail("invalid_api_base_url", "api-base-url must be an origin without a path, query, or fragment.");
+  }
+  if (!url.hostname) fail("invalid_api_base_url", "api-base-url must include a hostname.");
+  return url.origin;
+}
+
+const apiBaseUrl = resolveApiBaseUrl(env.DEPLOYMENT_CLIENT_API_BASE_URL);
 
 function required(name, value) {
   const normalized = value?.trim();
@@ -41,7 +92,7 @@ function commonIdentity() {
 function writeOutput(name, value) {
   const outputPath = env.GITHUB_OUTPUT;
   if (!outputPath || value === undefined || value === null || value === "") return;
-  appendFileSync(outputPath, `${name}=${String(value).replace(/\r?\n/gu, " ")}\n`);
+  appendFileSync(outputPath, `${name}=${redact(value).replace(/\r?\n/gu, " ")}\n`);
 }
 
 function jsonInput(name, value) {
@@ -60,9 +111,10 @@ async function jsonResponse(response) {
   return response.json().catch(() => null);
 }
 
-async function call(path, method = "GET", body) {
+async function call(path, method = "GET", body, { retryable = method === "GET" } = {}) {
   if (!token) fail("missing_token", "token is required.");
-  for (let attempt = 0; attempt < 3; attempt += 1) {
+  const attempts = retryable ? 3 : 1;
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
     let response;
     try {
       response = await fetch(`${apiBaseUrl}${path}`, {
@@ -75,19 +127,17 @@ async function call(path, method = "GET", body) {
         ...(body ? { body: JSON.stringify(body) } : {}),
       });
     } catch (error) {
-      if (attempt === 2) throw error;
+      if (attempt + 1 === attempts || !isRetryableNetworkError(error)) throw error;
       await new Promise((resolve) => setTimeout(resolve, 1000 * (attempt + 1)));
       continue;
     }
     const payload = await jsonResponse(response);
-    if (response.status >= 500 && attempt < 2) {
+    if (retryableStatuses.has(response.status) && attempt + 1 < attempts) {
       await new Promise((resolve) => setTimeout(resolve, 1000 * (attempt + 1)));
       continue;
     }
-    if (!response.ok || payload?.ok === false) {
-      const code = payload?.error?.code || `http_${response.status}`;
-      fail(code, payload?.error?.message || "Deployment approval API request failed.");
-    }
+    if (!response.ok || payload?.ok === false)
+      fail(payload?.error?.code || `http_${response.status}`, "Deployment approval API request failed.");
     if (payload?.ok !== true)
       fail("invalid_api_response", "Deployment approval API response is invalid.");
     return payload.data;
@@ -152,13 +202,14 @@ async function main() {
       expiresAt: optional(env.DEPLOYMENT_CLIENT_EXPIRES_AT),
     });
   } else if (operation === "request-approval") {
+    const idempotencyKey = optional(env.DEPLOYMENT_CLIENT_IDEMPOTENCY_KEY);
     data = await call("/api/v1/deployments/request", "POST", {
       ...identity,
       changeSummary: optional(env.DEPLOYMENT_CLIENT_CHANGE_SUMMARY),
       validationSummary: optional(env.DEPLOYMENT_CLIENT_VALIDATION_SUMMARY),
       requestSource: optional(env.DEPLOYMENT_CLIENT_REQUEST_SOURCE),
       requestUrl: optional(env.DEPLOYMENT_CLIENT_REQUEST_URL),
-      idempotencyKey: optional(env.DEPLOYMENT_CLIENT_IDEMPOTENCY_KEY),
+      idempotencyKey,
       artifactId: optional(env.DEPLOYMENT_CLIENT_ARTIFACT_ID),
       artifactDigest: optional(env.DEPLOYMENT_CLIENT_ARTIFACT_DIGEST),
     });
@@ -224,7 +275,7 @@ async function main() {
       errorCode: optional(env.DEPLOYMENT_CLIENT_ERROR_CODE),
       artifactId: optional(env.DEPLOYMENT_CLIENT_ARTIFACT_ID),
       artifactDigest: optional(env.DEPLOYMENT_CLIENT_ARTIFACT_DIGEST),
-    });
+    }, { retryable: true });
   } else if (operation === "deployment-callback") {
     data = await call("/api/v1/deployments/runs/update", "POST", {
       ...identity,
@@ -238,7 +289,7 @@ async function main() {
       phase: optional(env.DEPLOYMENT_CLIENT_PHASE),
       errorCode: optional(env.DEPLOYMENT_CLIENT_ERROR_CODE),
       createIfMissing: env.DEPLOYMENT_CLIENT_CREATE_IF_MISSING === "true",
-    });
+    }, { retryable: true });
   } else {
     fail("unsupported_operation", `Unsupported operation: ${operation}.`);
   }
